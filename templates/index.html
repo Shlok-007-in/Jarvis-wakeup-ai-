@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jarvis</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="jarvis" class="circle" title="Activate Jarvis" ondblclick="stopJarvis()">
+    <div class="label">Jarvis</div>
+  </div>
+  <div id="status" class="status">Idle</div>
+
+  <audio id="music" src="/media/jarvis.mp3" preload="auto"></audio>
+
+  <script>
+    const jarvis = document.getElementById('jarvis');
+    const statusEl = document.getElementById('status');
+    const music = document.getElementById('music');
+
+    let active = false;
+
+    async function startJarvis() {
+      if (active) return;
+      active = true;
+      document.getElementById('jarvis').classList.add('active');
+      setStatus('Listening for "Hey Jarvis"...');
+      try {
+        const res = await fetch('/start', { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to start');
+        const data = await res.json();
+        if (data && data.wake) {
+          setStatus('Wake detected. Playing...');
+          try { await music.play(); } catch (_) {}
+        } else {
+          setStatus('No wake detected.');
+        }
+      } catch (e) {
+        setStatus('Error: ' + (e?.message || 'unknown'));
+      } finally {
+        document.getElementById('jarvis').classList.remove('active');
+        active = false;
+      }
+    }
+
+    async function stopJarvis() {
+      try { await fetch('/stop', { method: 'POST' }); } catch (_) {}
+      try { music.pause(); music.currentTime = 0; } catch (_) {}
+      setStatus('Stopped');
+      document.getElementById('jarvis').classList.remove('active');
+      active = false;
+    }
+
+    function setStatus(text) { statusEl.textContent = text; }
+
+    // removed polling since backend long-polls /start
+
+    jarvis.addEventListener('click', startJarvis);
+
+    window.addEventListener('beforeunload', (e) => {
+      try { navigator.sendBeacon && navigator.sendBeacon('/stop'); } catch (_) {}
+    });
+
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'hidden') {
+        try { await fetch('/stop', { method: 'POST', keepalive: true }); } catch (_) {}
+        try { music.pause(); music.currentTime = 0; } catch (_) {}
+        try { music.src = ''; music.load(); } catch (_) {}
+      }
+    });
+
+    window.addEventListener('pagehide', async () => {
+      try { await fetch('/stop', { method: 'POST', keepalive: true }); } catch (_) {}
+      try { music.pause(); music.currentTime = 0; } catch (_) {}
+      try { music.src = ''; music.load(); } catch (_) {}
+    });
+
+    window.addEventListener('unload', () => {
+      try { music.pause(); music.currentTime = 0; } catch (_) {}
+      try { music.src = ''; music.load(); } catch (_) {}
+    });
+  </script>
+</body>
+</html>
+
+
+
